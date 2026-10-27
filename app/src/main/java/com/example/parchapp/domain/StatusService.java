@@ -10,8 +10,7 @@ import android.hardware.SensorManager;
 import java.util.ArrayList;
 import java.util.List;
 
-/* The scenario owns the availability the user broadcasts to their groups: the quick status shown on the dashboard and the status chosen in the availability sheet. Kept on the device so it survives a process restart.
- */
+/* The scenario owns the availability the user broadcasts to their groups: the quick status shown on the dashboard and the status chosen in the availability sheet. Kept on the device so it survives a process restart. */
 public class StatusService implements SensorEventListener {
 
     public interface Listener {
@@ -26,6 +25,8 @@ public class StatusService implements SensorEventListener {
     private static final String KEY_NEXT_ACTIVITY = "next_activity";
     private static final String KEY_AVAILABILITY = "availability";
     private static final String KEY_DURATION = "availability_duration";
+    private static final String KEY_FROM_MOTION = "availability_from_motion";
+    public static final String COMMUTING = "Commute / In Transit";
     private static final String KEY_LAST_MOTION_SUGGESTION = "last_motion_suggestion";
     private static final long MOTION_SUGGESTION_COOLDOWN_MS = 10 * 60 * 1000L;
 
@@ -72,9 +73,24 @@ public class StatusService implements SensorEventListener {
     }
 
     public void setAvailability(String availability, String duration) {
+        saveAvailability(availability, duration, false);
+    }
+
+    /* F1: the user accepted the commuting suggestion that came from the motion sensor. */
+    public void acceptCommuteSuggestion() {
+        saveAvailability(COMMUTING, "For 1 hour", true);
+    }
+
+    /* True when the current status was set from the motion sensor suggestion. */
+    public boolean isFromMotion() {
+        return prefs.getBoolean(KEY_FROM_MOTION, false);
+    }
+
+    private void saveAvailability(String availability, String duration, boolean fromMotion) {
         prefs.edit()
                 .putString(KEY_AVAILABILITY, availability)
                 .putString(KEY_DURATION, duration)
+                .putBoolean(KEY_FROM_MOTION, fromMotion)
                 .apply();
         notifyListeners();
     }
@@ -122,7 +138,7 @@ public class StatusService implements SensorEventListener {
     }
 
     private void suggestCommute() {
-        if ("Commute / In Transit".equals(getAvailability())) {
+        if (COMMUTING.equals(getAvailability())) {
             return;
         }
         long now = System.currentTimeMillis();

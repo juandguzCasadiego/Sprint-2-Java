@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 class FirestoreActivityRepository implements ActivityRepository {
+    private final TravelTimeCache travelCache = new TravelTimeCache();
     private static final String TAG = "FirestoreActivityRepo";
 
     private final FirebaseFirestore db;
@@ -52,8 +53,7 @@ class FirestoreActivityRepository implements ActivityRepository {
             map.put("planningContext", planningContext);
         }
 
-        // Firestore acknowledges an offline write locally and queues it for the server. Surface
-        // validation or permission failures instead of reporting success unconditionally.
+        // Firestore acknowledges an offline write locally and queues it for the server. Surface validation or permission failures instead of reporting success unconditionally.
         ref.set(map)
                 .addOnSuccessListener(unused -> {
                     PlannedActivity saved = activity.withId(ref.getId());
@@ -119,5 +119,15 @@ class FirestoreActivityRepository implements ActivityRepository {
             return ((Number) value).longValue();
         }
         return 0L;
+    }
+
+    @Override
+    public Integer getCachedTravelMinutes(String activityId) {
+        return travelCache.get(activityId);
+    }
+
+    @Override
+    public void cacheTravelMinutes(String activityId, int minutes) {
+        travelCache.put(activityId, minutes);
     }
 }

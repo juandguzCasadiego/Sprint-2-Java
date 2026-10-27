@@ -42,6 +42,8 @@ public class MainActivity extends AppCompatActivity {
         if (restored != null) {
             findViewById(R.id.restored_session_card).setVisibility(View.VISIBLE);
             ((android.widget.TextView) findViewById(R.id.restored_user_name)).setText(restored.getFirstName());
+            ((android.widget.TextView) findViewById(R.id.restored_user_initials)).setText(restored.getInitials());
+            ((android.widget.TextView) findViewById(R.id.restored_user_email)).setText(restored.getEmail());
             continueButton.setText("Continue as " + restored.getFirstName());
             continueButton.setOnClickListener(v -> openDashboard(restored));
         } else if (Repositories.isFirebaseAvailable()) {

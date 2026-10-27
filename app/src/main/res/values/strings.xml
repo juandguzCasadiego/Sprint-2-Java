@@ -135,4 +135,6 @@
     <string name="close_label">Close</string>
     <string name="custom_duration">Custom</string>
     <string name="custom_duration_title">Meeting duration (minutes)</string>
+    <string name="offline_banner">You are offline. Showing saved plans; changes sync when you reconnect.</string>
+    <string name="late_warning">⚠  You won\'t make it on time</string>
 </resources>

@@ -69,6 +69,20 @@
             android:textStyle="bold" />
     </LinearLayout>
 
+    <!-- F3: shown while the phone has no connection -->
+    <TextView
+        android:id="@+id/offline_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#FEF3C7"
+        android:gravity="center"
+        android:padding="8dp"
+        android:text="@string/offline_banner"
+        android:textColor="#92400E"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -113,9 +127,9 @@
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
                     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="⚡  QUICK STATUS" android:textColor="#BFD5FF" android:textSize="10sp" android:textStyle="bold" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/available_now" android:textColor="@android:color/white" android:textSize="18sp" android:textStyle="bold" />
+                        <TextView android:id="@+id/status_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/available_now" android:textColor="@android:color/white" android:textSize="18sp" android:textStyle="bold" />
                     </LinearLayout>
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/bg_green_chip" android:paddingStart="8dp" android:paddingTop="6dp" android:paddingEnd="8dp" android:paddingBottom="6dp" android:text="● Live Sync" android:textColor="@color/brand_success_dark" android:textSize="10sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/status_source_chip" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/bg_green_chip" android:paddingStart="8dp" android:paddingTop="6dp" android:paddingEnd="8dp" android:paddingBottom="6dp" android:text="● Live Sync" android:textColor="@color/brand_success_dark" android:textSize="10sp" android:textStyle="bold" />
                 </LinearLayout>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:orientation="horizontal">
                     <LinearLayout android:id="@+id/btn_edit_free_until" android:clickable="true" android:focusable="true" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_weight="1" android:background="#2B64C6" android:orientation="vertical" android:padding="10dp">
@@ -142,6 +156,9 @@
                 <TextView android:id="@+id/plan_title_text" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:textColor="@color/brand_dark" android:textSize="14sp" android:textStyle="bold" />
                 <TextView android:id="@+id/plan_time_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textColor="@color/brand_slate" android:textSize="11sp" />
                 <TextView android:id="@+id/plan_location_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:textColor="@color/brand_slate" android:textSize="11sp" />
+                <!-- F3 and F7: travel time to the venue and a warning when the plan starts before you can arrive -->
+                <TextView android:id="@+id/plan_travel_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:textColor="@color/brand_primary" android:textSize="11sp" android:textStyle="bold" android:visibility="gone" />
+                <TextView android:id="@+id/plan_late_warning" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_late_warning" android:padding="8dp" android:text="@string/late_warning" android:textColor="#B91C1C" android:textSize="11sp" android:textStyle="bold" android:visibility="gone" />
                 <View android:layout_width="match_parent" android:layout_height="5dp" android:layout_marginTop="12dp" android:background="@drawable/bg_progress_track" />
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:gravity="center_vertical">
                     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="horizontal">

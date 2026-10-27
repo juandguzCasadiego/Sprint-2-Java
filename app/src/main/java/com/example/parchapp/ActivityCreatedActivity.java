@@ -3,6 +3,7 @@ package com.example.parchapp;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.widget.CompoundButton;
 import android.widget.Toast;
@@ -91,7 +92,12 @@ public class ActivityCreatedActivity extends AppCompatActivity {
             tracker.trackFeature(AnalyticsEvents.FEATURE_SCHEDULE, SCREEN);
             toast("Opening schedule");
         });
-        findViewById(R.id.back_home_button).setOnClickListener(v -> finishAffinity());
+        // Back to the Dashboard, closing the screens opened on top of it (finishAffinity closed the app).
+        findViewById(R.id.back_home_button).setOnClickListener(v -> {
+            startActivity(new Intent(this, DashboardActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+            finish();
+        });
     }
 
     private void copyInviteLink() {

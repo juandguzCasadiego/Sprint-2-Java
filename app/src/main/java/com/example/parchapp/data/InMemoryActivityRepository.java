@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.Collections;
 
 class InMemoryActivityRepository implements ActivityRepository {
+    private final TravelTimeCache travelCache = new TravelTimeCache();
     private final List<PlannedActivity> activities = new ArrayList<>();
 
     @Override
@@ -22,5 +23,15 @@ class InMemoryActivityRepository implements ActivityRepository {
     @Override
     public void getActivities(String userId, Callback<List<PlannedActivity>> callback) {
         MainThread.post(() -> callback.onSuccess(Collections.unmodifiableList(new ArrayList<>(activities))));
+    }
+
+    @Override
+    public Integer getCachedTravelMinutes(String activityId) {
+        return travelCache.get(activityId);
+    }
+
+    @Override
+    public void cacheTravelMinutes(String activityId, int minutes) {
+        travelCache.put(activityId, minutes);
     }
 }

@@ -62,6 +62,7 @@
                     android:layout_height="56dp"
                     android:background="@drawable/bg_avatar"
                     android:gravity="center"
+                    android:id="@+id/restored_user_initials"
                     android:text="AV"
                     android:textColor="@color/brand_dark"
                     android:textSize="16sp"
@@ -114,6 +115,7 @@
                         android:layout_height="wrap_content"
                         android:ellipsize="end"
                         android:singleLine="true"
+                        android:id="@+id/restored_user_email"
                         android:text="alex.valenzuela@university.edu"
                         android:textColor="@color/brand_primary"
                         android:textSize="12sp" />
