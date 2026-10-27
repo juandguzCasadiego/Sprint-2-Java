@@ -9,6 +9,8 @@ constraintlayout = "2.2.2"
 firebaseBom = "34.3.0"
 googleServices = "4.4.3"
 googleAuth = "21.4.0"
+playServicesLocation = "21.3.0"
+zxing = "3.5.3"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -23,6 +25,8 @@ firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
 firebase-functions = { group = "com.google.firebase", name = "firebase-functions" }
 play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "googleAuth" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

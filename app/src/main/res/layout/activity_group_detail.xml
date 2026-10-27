@@ -139,6 +139,10 @@
                 <TextView android:id="@+id/plan_title_text" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Weekly House Dinner &amp; Grocery Run" android:textColor="@color/brand_dark" android:textSize="14sp" android:textStyle="bold" />
                 <TextView android:id="@+id/next_plan_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:textColor="@color/brand_slate" android:textSize="11sp" />
                 <TextView android:id="@+id/next_plan_location" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:textColor="@color/brand_slate" android:textSize="11sp" />
+                <!-- f3: campus status, travel time and a warning when you will be late -->
+                <TextView android:id="@+id/campus_status_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="◎  Checking your location…" android:textColor="@color/brand_slate" android:textSize="11sp" />
+                <TextView android:id="@+id/travel_time_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="➜  Calculating travel time…" android:textColor="@color/brand_primary" android:textSize="11sp" android:textStyle="bold" />
+                <TextView android:id="@+id/late_warning_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/bg_light_blue" android:backgroundTint="@color/brand_rose_background" android:paddingStart="8dp" android:paddingTop="4dp" android:paddingEnd="8dp" android:paddingBottom="4dp" android:text="⚠  You won't make it on time" android:textColor="@color/brand_rose" android:textSize="10sp" android:textStyle="bold" android:visibility="gone" />
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:gravity="center_vertical">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Roommate RSVP Status" android:textColor="@color/brand_slate" android:textSize="10sp" />
                     <TextView android:id="@+id/rsvp_ready_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="100% Ready (4 of 4)" android:textColor="@color/brand_success_dark" android:textSize="10sp" android:textStyle="bold" />
@@ -169,64 +173,8 @@
                     android:tint="@color/brand_slate" />
             </LinearLayout>
 
-            <!-- Roommate: Alex -->
-            <LinearLayout android:id="@+id/member_card_0" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/bg_dashboard_card" android:gravity="center_vertical" android:orientation="horizontal" android:padding="12dp">
-                <FrameLayout android:layout_width="44dp" android:layout_height="44dp">
-                    <TextView android:id="@+id/member_initials_0" android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/bg_oval_solid" android:backgroundTint="@color/brand_primary" android:gravity="center" android:textColor="@android:color/white" android:textSize="12sp" android:textStyle="bold" />
-                    <ImageView android:layout_width="16dp" android:layout_height="16dp" android:layout_gravity="bottom|end" android:background="@drawable/bg_check_badge" android:padding="3dp" android:src="@drawable/ic_check" android:tint="@android:color/white" />
-                </FrameLayout>
-                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:layout_weight="1" android:orientation="vertical">
-                    <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center_vertical">
-                        <TextView android:id="@+id/member_name_0" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/brand_dark" android:textSize="12sp" android:textStyle="bold" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:background="@drawable/bg_light_blue" android:paddingStart="6dp" android:paddingTop="2dp" android:paddingEnd="6dp" android:paddingBottom="2dp" android:text="LEADER" android:textColor="@color/brand_primary" android:textSize="8sp" android:textStyle="bold" />
-                    </LinearLayout>
-                    <TextView android:id="@+id/member_summary_0" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/brand_slate" android:textSize="10sp" />
-                    <TextView android:id="@+id/member_status_0" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="@color/brand_success_dark" android:textSize="10sp" android:textStyle="bold" />
-                </LinearLayout>
-                <ImageButton android:id="@+id/chat_alex_button" android:layout_width="34dp" android:layout_height="34dp" android:background="@drawable/bg_icon_badge_square" android:backgroundTint="#F8FAFC" android:contentDescription="Chat with Alex" android:padding="8dp" android:src="@drawable/ic_chat" android:tint="@color/brand_slate" />
-            </LinearLayout>
-
-            <!-- Roommate: Mateo -->
-            <LinearLayout android:id="@+id/member_card_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_dashboard_card" android:gravity="center_vertical" android:orientation="horizontal" android:padding="12dp">
-                <FrameLayout android:layout_width="44dp" android:layout_height="44dp">
-                    <TextView android:id="@+id/member_initials_1" android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/bg_oval_solid" android:backgroundTint="#94A3B8" android:gravity="center" android:textColor="@android:color/white" android:textSize="12sp" android:textStyle="bold" />
-                    <ImageView android:layout_width="16dp" android:layout_height="16dp" android:layout_gravity="bottom|end" android:background="@drawable/bg_check_badge" android:padding="3dp" android:src="@drawable/ic_check" android:tint="@android:color/white" />
-                </FrameLayout>
-                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:layout_weight="1" android:orientation="vertical">
-                    <TextView android:id="@+id/member_name_1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/brand_dark" android:textSize="12sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/member_summary_1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/brand_slate" android:textSize="10sp" />
-                    <TextView android:id="@+id/member_status_1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="@color/brand_success_dark" android:textSize="10sp" android:textStyle="bold" />
-                </LinearLayout>
-                <ImageButton android:id="@+id/chat_mateo_button" android:layout_width="34dp" android:layout_height="34dp" android:background="@drawable/bg_icon_badge_square" android:backgroundTint="#F8FAFC" android:contentDescription="Chat with Mateo" android:padding="8dp" android:src="@drawable/ic_chat" android:tint="@color/brand_slate" />
-            </LinearLayout>
-
-            <!-- Roommate: Camila -->
-            <LinearLayout android:id="@+id/member_card_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_dashboard_card" android:gravity="center_vertical" android:orientation="horizontal" android:padding="12dp">
-                <FrameLayout android:layout_width="44dp" android:layout_height="44dp">
-                    <TextView android:id="@+id/member_initials_2" android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/bg_oval_solid" android:backgroundTint="@color/brand_indigo" android:gravity="center" android:textColor="@android:color/white" android:textSize="12sp" android:textStyle="bold" />
-                    <ImageView android:layout_width="16dp" android:layout_height="16dp" android:layout_gravity="bottom|end" android:background="@drawable/bg_check_badge" android:padding="3dp" android:src="@drawable/ic_check" android:tint="@android:color/white" />
-                </FrameLayout>
-                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:layout_weight="1" android:orientation="vertical">
-                    <TextView android:id="@+id/member_name_2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/brand_dark" android:textSize="12sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/member_summary_2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/brand_slate" android:textSize="10sp" />
-                    <TextView android:id="@+id/member_status_2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="@color/brand_success_dark" android:textSize="10sp" android:textStyle="bold" />
-                </LinearLayout>
-                <ImageButton android:id="@+id/chat_camila_button" android:layout_width="34dp" android:layout_height="34dp" android:background="@drawable/bg_icon_badge_square" android:backgroundTint="#F8FAFC" android:contentDescription="Chat with Camila" android:padding="8dp" android:src="@drawable/ic_chat" android:tint="@color/brand_slate" />
-            </LinearLayout>
-
-            <!-- Roommate: Lucas -->
-            <LinearLayout android:id="@+id/member_card_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_dashboard_card" android:gravity="center_vertical" android:orientation="horizontal" android:padding="12dp">
-                <FrameLayout android:layout_width="44dp" android:layout_height="44dp">
-                    <TextView android:id="@+id/member_initials_3" android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/bg_oval_solid" android:backgroundTint="@color/brand_purple" android:gravity="center" android:textColor="@android:color/white" android:textSize="12sp" android:textStyle="bold" />
-                    <ImageView android:layout_width="16dp" android:layout_height="16dp" android:layout_gravity="bottom|end" android:background="@drawable/bg_check_badge" android:padding="3dp" android:src="@drawable/ic_check" android:tint="@android:color/white" />
-                </FrameLayout>
-                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:layout_weight="1" android:orientation="vertical">
-                    <TextView android:id="@+id/member_name_3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/brand_dark" android:textSize="12sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/member_summary_3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/brand_slate" android:textSize="10sp" />
-                    <TextView android:id="@+id/member_status_3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="@color/brand_success_dark" android:textSize="10sp" android:textStyle="bold" />
-                </LinearLayout>
-                <ImageButton android:id="@+id/chat_lucas_button" android:layout_width="34dp" android:layout_height="34dp" android:background="@drawable/bg_icon_badge_square" android:backgroundTint="#F8FAFC" android:contentDescription="Chat with Lucas" android:padding="8dp" android:src="@drawable/ic_chat" android:tint="@color/brand_slate" />
-            </LinearLayout>
+            <!-- f6: one row per member of the group, made in GroupDetailActivity with item_roster_member -->
+            <LinearLayout android:id="@+id/roster_list" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
 
             <!-- Quick actions -->
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp">

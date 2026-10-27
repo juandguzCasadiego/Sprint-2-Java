@@ -176,7 +176,8 @@ public class CreateActivitySheet extends BottomSheetDialogFragment {
         accepted.put(AnalyticsEvents.PARAM_GROUP_SIZE, args.getInt(ARG_GROUP_SIZE));
         accepted.put(AnalyticsEvents.PARAM_SLOT_POSITION, slotPosition);
         accepted.put(AnalyticsEvents.PARAM_RECOMMENDED_POSITION, args.getInt(ARG_RECOMMENDED_POSITION));
-        accepted.put(AnalyticsEvents.PARAM_MODIFIED, modified);
+        // bq3: we send 1 or 0 (not true/false) because the sql query reads this value as a number
+        accepted.put(AnalyticsEvents.PARAM_MODIFIED, modified ? 1 : 0);
         if (recommendationId != null) {
             accepted.put(AnalyticsEvents.PARAM_RECOMMENDATION_ID, recommendationId);
         }

@@ -68,6 +68,17 @@ class FirestoreGroupRepository extends BaseGroupRepository {
     }
 
     @Override
+    public void createGroup(Group group, Callback<Group> callback) {
+        // firestore gives a random id to the new document
+        DocumentReference ref = collection.document();
+        ref.set(toMap(group)).addOnFailureListener(e -> Log.w(TAG, "Creating group failed", e));
+        // the write is saved on the phone first, so we answer right away (it also works offline)
+        Group saved = new Group(ref.getId(), group.getName(), group.getIcon(), group.getPlanTitle(),
+                group.getMembers(), group.getGoingIds(), group.getMaybeIds(), group.getPendingInvites());
+        MainThread.post(() -> callback.onSuccess(saved));
+    }
+
+    @Override
     protected void startObserving(String groupId) {
         ListenerRegistration registration = collection.document(groupId).addSnapshotListener((snapshot, error) -> {
             if (error != null) {
@@ -116,7 +127,10 @@ class FirestoreGroupRepository extends BaseGroupRepository {
 
     static Map<String, Object> toMap(Group group) {
         List<Map<String, Object>> members = new ArrayList<>();
+        // getGroups() looks for the user in this list, so every group must save it
+        List<String> memberIds = new ArrayList<>();
         for (Member member : group.getMembers()) {
+            memberIds.add(member.getId());
             List<Map<String, Object>> busy = new ArrayList<>();
             for (TimeBlock block : member.getBusyBlocks()) {
                 Map<String, Object> blockMap = new HashMap<>();
@@ -138,6 +152,7 @@ class FirestoreGroupRepository extends BaseGroupRepository {
         map.put("icon", group.getIcon());
         map.put("planTitle", group.getPlanTitle());
         map.put("members", members);
+        map.put("memberIds", memberIds);
         map.put("goingIds", group.getGoingIds());
         map.put("maybeIds", group.getMaybeIds());
         map.put("pendingInvites", group.getPendingInvites());

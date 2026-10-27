@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.ArrayList;
 
 /* Used when Firebase is not configured. Data lives only while the process is alive. */
 class InMemoryGroupRepository extends BaseGroupRepository {
@@ -36,6 +35,16 @@ class InMemoryGroupRepository extends BaseGroupRepository {
             }
         }
         MainThread.post(() -> callback.onSuccess(result));
+    }
+
+    @Override
+    public void createGroup(Group group, Callback<Group> callback) {
+        // without firebase we make the id with the current time
+        Group saved = new Group("group_" + System.currentTimeMillis(), group.getName(), group.getIcon(),
+                group.getPlanTitle(), group.getMembers(), group.getGoingIds(), group.getMaybeIds(),
+                group.getPendingInvites());
+        groups.put(saved.getId(), saved);
+        MainThread.post(() -> callback.onSuccess(saved));
     }
 
     @Override

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- one member of the roster in group details. GroupDetailActivity fills the texts -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_dashboard_card" android:gravity="center_vertical" android:orientation="horizontal" android:padding="12dp">
+    <FrameLayout android:layout_width="44dp" android:layout_height="44dp">
+        <TextView android:id="@+id/member_initials" android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/bg_oval_solid" android:backgroundTint="@color/brand_primary" android:gravity="center" android:text="AV" android:textColor="@android:color/white" android:textSize="12sp" android:textStyle="bold" />
+        <ImageView android:id="@+id/member_going_badge" android:layout_width="16dp" android:layout_height="16dp" android:layout_gravity="bottom|end" android:background="@drawable/bg_check_badge" android:padding="3dp" android:src="@drawable/ic_check" android:tint="@android:color/white" />
+    </FrameLayout>
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:layout_weight="1" android:orientation="vertical">
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center_vertical">
+            <TextView android:id="@+id/member_name" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Alex" android:textColor="@color/brand_dark" android:textSize="12sp" android:textStyle="bold" />
+            <TextView android:id="@+id/member_leader_badge" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:background="@drawable/bg_light_blue" android:paddingStart="6dp" android:paddingTop="2dp" android:paddingEnd="6dp" android:paddingBottom="2dp" android:text="LEADER" android:textColor="@color/brand_primary" android:textSize="8sp" android:textStyle="bold" />
+        </LinearLayout>
+        <TextView android:id="@+id/member_rsvp_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Going" android:textColor="@color/brand_slate" android:textSize="10sp" />
+        <TextView android:id="@+id/member_status_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="●  Free now" android:textColor="@color/brand_success_dark" android:textSize="10sp" android:textStyle="bold" />
+    </LinearLayout>
+    <ImageButton android:id="@+id/member_chat_button" android:layout_width="34dp" android:layout_height="34dp" android:background="@drawable/bg_icon_badge_square" android:backgroundTint="#F8FAFC" android:contentDescription="Chat with member" android:padding="8dp" android:src="@drawable/ic_chat" android:tint="@color/brand_slate" />
+</LinearLayout>
