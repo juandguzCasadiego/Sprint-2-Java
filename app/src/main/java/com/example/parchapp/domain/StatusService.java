@@ -7,10 +7,18 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 
-import java.util.ArrayList;
-import java.util.List;
+import com.example.parchapp.data.ProfileRepository;
+import com.example.parchapp.util.Callback;
 
-/* The scenario owns the availability the user broadcasts to their groups: the quick status shown on the dashboard and the status chosen in the availability sheet. Kept on the device so it survives a process restart. */
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
+
+/* The availability the user broadcasts to their groups. The backend profile (updatePresence / getProfile) is the source of truth; the device keeps a copy so the card shows instantly and offline. Also runs the accelerometer detector for the commuting suggestion (F1). */
 public class StatusService implements SensorEventListener {
 
     public interface Listener {
@@ -21,8 +29,6 @@ public class StatusService implements SensorEventListener {
     }
 
     private static final String PREFS = "parchapp_status";
-    private static final String KEY_FREE_UNTIL = "free_until";
-    private static final String KEY_NEXT_ACTIVITY = "next_activity";
     private static final String KEY_AVAILABILITY = "availability";
     private static final String KEY_DURATION = "availability_duration";
     private static final String KEY_FROM_MOTION = "availability_from_motion";
@@ -31,45 +37,46 @@ public class StatusService implements SensorEventListener {
     private static final long MOTION_SUGGESTION_COOLDOWN_MS = 10 * 60 * 1000L;
 
     private final SharedPreferences prefs;
+    private final ProfileRepository profiles;
     private final SensorManager sensorManager;
     private final Sensor accelerometer;
     private final List<Listener> listeners = new ArrayList<>();
     private int movementSamples;
     private boolean detectingMotion;
 
-    public StatusService(Context context) {
+    public StatusService(Context context, ProfileRepository profiles) {
+        this.profiles = profiles;
         prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         sensorManager = (SensorManager) context.getApplicationContext().getSystemService(Context.SENSOR_SERVICE);
         accelerometer = sensorManager == null ? null : sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
     }
 
-    public String getFreeUntil() {
-        return prefs.getString(KEY_FREE_UNTIL, "4:00 PM");
-    }
-
-    public String getNextActivity() {
-        return prefs.getString(KEY_NEXT_ACTIVITY, "Library Study");
-    }
-
+    /* Empty until the backend profile has been read once. */
     public String getAvailability() {
-        return prefs.getString(KEY_AVAILABILITY, "Available now");
+        return prefs.getString(KEY_AVAILABILITY, "");
     }
 
     public String getAvailabilityDuration() {
         return prefs.getString(KEY_DURATION, "For 1 hour");
     }
 
-    /** In the following code the empty values keep the current one, matching the quick status sheet. */
-    public void updateQuickStatus(String freeUntil, String nextActivity) {
-        SharedPreferences.Editor editor = prefs.edit();
-        if (!freeUntil.isEmpty()) {
-            editor.putString(KEY_FREE_UNTIL, freeUntil);
-        }
-        if (!nextActivity.isEmpty()) {
-            editor.putString(KEY_NEXT_ACTIVITY, nextActivity);
-        }
-        editor.apply();
-        notifyListeners();
+    /* Reads the status saved in the backend profile; the card then shows what groups see. */
+    public void refreshFromBackend() {
+        profiles.getProfile(new Callback<ProfileRepository.Profile>() {
+            @Override
+            public void onSuccess(ProfileRepository.Profile profile) {
+                String label = labelFor(profile.status);
+                if (!label.equals(getAvailability())) {
+                    prefs.edit().putString(KEY_AVAILABILITY, label).putBoolean(KEY_FROM_MOTION, false).apply();
+                }
+                notifyListeners();
+            }
+
+            @Override
+            public void onError(Exception error) {
+                notifyListeners();
+            }
+        });
     }
 
     public void setAvailability(String availability, String duration) {
@@ -93,6 +100,81 @@ public class StatusService implements SensorEventListener {
                 .putBoolean(KEY_FROM_MOTION, fromMotion)
                 .apply();
         notifyListeners();
+        // Groups see the status through the backend profile; the local copy is only for display.
+        profiles.updatePresence(codeFor(availability), expiryFor(duration, System.currentTimeMillis()),
+                new Callback<ProfileRepository.Profile>() {
+                    @Override
+                    public void onSuccess(ProfileRepository.Profile profile) {
+                    }
+
+                    @Override
+                    public void onError(Exception error) {
+                        android.util.Log.w("StatusService", "Could not save presence", error);
+                    }
+                });
+    }
+
+    /* Labels shown in Set Availability Status, mapped to the backend presence codes. */
+    public static String codeFor(String label) {
+        String text = label.toLowerCase(Locale.ROOT);
+        if (text.startsWith("in class")) {
+            return ProfileRepository.IN_CLASS;
+        } else if (text.startsWith("deep focus")) {
+            return ProfileRepository.FOCUSED;
+        } else if (text.startsWith("busy")) {
+            return ProfileRepository.BUSY;
+        } else if (text.startsWith("commute")) {
+            return ProfileRepository.IN_TRANSIT;
+        } else if (text.startsWith("offline")) {
+            return ProfileRepository.OFFLINE;
+        }
+        return ProfileRepository.ACTIVE;
+    }
+
+    public static String labelFor(String code) {
+        switch (code == null ? "" : code) {
+            case ProfileRepository.IN_CLASS:
+                return "In Class";
+            case ProfileRepository.FOCUSED:
+                return "Deep Focus";
+            case ProfileRepository.BUSY:
+                return "Busy / Personal";
+            case ProfileRepository.IN_TRANSIT:
+                return COMMUTING;
+            case ProfileRepository.OFFLINE:
+                return "Offline";
+            default:
+                return "Available now";
+        }
+    }
+
+    /* The backend only accepts statuses that expire within 24 hours. */
+    public static String expiryFor(String duration, long nowMillis) {
+        TimeZone bogota = TimeZone.getTimeZone("America/Bogota");
+        Calendar expiry = Calendar.getInstance(bogota);
+        expiry.setTimeInMillis(nowMillis);
+        String text = duration == null ? "" : duration.toLowerCase(Locale.ROOT);
+        if (text.contains("6:00 pm")) {
+            expiry.set(Calendar.HOUR_OF_DAY, 18);
+            expiry.set(Calendar.MINUTE, 0);
+            if (expiry.getTimeInMillis() <= nowMillis) {
+                expiry.setTimeInMillis(nowMillis + 3600_000L);
+            }
+        } else if (text.contains("tomorrow")) {
+            expiry.add(Calendar.DAY_OF_MONTH, 1);
+            expiry.set(Calendar.HOUR_OF_DAY, 7);
+            expiry.set(Calendar.MINUTE, 0);
+        } else if (text.contains("indefinite") || text.contains("manual")) {
+            expiry.setTimeInMillis(nowMillis + 24 * 3600_000L - 60_000L);
+        } else {
+            expiry.setTimeInMillis(nowMillis + 3600_000L);
+        }
+        if (expiry.getTimeInMillis() - nowMillis > 24 * 3600_000L - 60_000L) {
+            expiry.setTimeInMillis(nowMillis + 24 * 3600_000L - 60_000L);
+        }
+        SimpleDateFormat iso = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+        iso.setTimeZone(TimeZone.getTimeZone("UTC"));
+        return iso.format(new Date(expiry.getTimeInMillis()));
     }
 
     /** Starts a foreground-only accelerometer detector; no background location permission is needed. */

@@ -13,9 +13,17 @@ public class Group {
     private final List<String> goingIds;
     private final List<String> maybeIds;
     private final List<String> pendingInvites;
+    /* Who created the group; empty for groups that have no owner (the seeded demo groups). */
+    private final String ownerId;
 
     public Group(String id, String name, String icon, String planTitle, List<Member> members,
                  List<String> goingIds, List<String> maybeIds, List<String> pendingInvites) {
+        this(id, name, icon, planTitle, members, goingIds, maybeIds, pendingInvites, "");
+    }
+
+    public Group(String id, String name, String icon, String planTitle, List<Member> members,
+                 List<String> goingIds, List<String> maybeIds, List<String> pendingInvites, String ownerId) {
+        this.ownerId = ownerId == null ? "" : ownerId;
         this.id = id;
         this.name = name;
         this.icon = icon;
@@ -24,6 +32,10 @@ public class Group {
         this.goingIds = new ArrayList<>(goingIds);
         this.maybeIds = new ArrayList<>(maybeIds);
         this.pendingInvites = new ArrayList<>(pendingInvites);
+    }
+
+    public String getOwnerId() {
+        return ownerId;
     }
 
     public String getId() {

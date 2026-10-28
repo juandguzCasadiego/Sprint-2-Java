@@ -64,12 +64,26 @@
             android:layout_height="46dp"
             android:layout_marginTop="6dp"
             android:background="@drawable/bg_login_field"
-            android:hint="e.g. Central Library"
+            android:hint="Pick a campus place or type one"
             android:paddingStart="14dp"
             android:paddingEnd="14dp"
             android:textColor="@color/brand_dark"
             android:textColorHint="@color/brand_slate"
             android:textSize="13sp" />
+
+        <!-- Campus places from Firestore (campusAreas); picking one stores its locationAreaId -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/place_chips"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_create_activity"

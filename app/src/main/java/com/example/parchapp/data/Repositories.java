@@ -21,6 +21,8 @@ public final class Repositories {
     private static AuthRepository auth;
     private static InsightsRepository insights;
     private static StatusService status;
+    private static CampusPlaceRepository places;
+    private static ProfileRepository profiles;
     private static ScheduleRepository schedules;
 
     private Repositories() {
@@ -55,11 +57,13 @@ public final class Repositories {
             db.setFirestoreSettings(new FirebaseFirestoreSettings.Builder()
                     .setLocalCacheSettings(PersistentCacheSettings.newBuilder().build())
                     .build());
-            groups = new FirestoreGroupRepository(db);
             activities = new FirestoreActivityRepository(db);
             auth = new FirebaseAuthRepository(firebaseAuth);
             insights = new FirestoreInsightsRepository(db);
             schedules = new FunctionsScheduleRepository(functions);
+            places = new FirestoreCampusPlaceRepository(db);
+            groups = new FirestoreGroupRepository(db, functions);
+            profiles = new FunctionsProfileRepository(functions);
         } else {
             groups = new InMemoryGroupRepository();
             activities = new InMemoryActivityRepository();
@@ -67,8 +71,11 @@ public final class Repositories {
             insights = callback -> MainThread.post(() ->
                     callback.onSuccess(InsightsRepository.DEFAULT_RECOMMENDED_POSITION));
             schedules = new InMemoryScheduleRepository();
+            // without a backend there is no place data; screens show that travel time is unavailable
+            places = callback -> MainThread.post(() -> callback.onSuccess(java.util.Collections.emptyList()));
+            profiles = new UnavailableProfileRepository();
         }
-        status = new StatusService(context);
+        status = new StatusService(context, profiles);
     }
 
     /* A fake key that only has the format of a Google API key ("AIza" plus 35 characters). It is built at runtime so secret scanners do not mistake a non-secret for a leaked key. */
@@ -100,6 +107,14 @@ public final class Repositories {
 
     public static InsightsRepository insights() {
         return insights;
+    }
+
+    public static ProfileRepository profiles() {
+        return profiles;
+    }
+
+    public static CampusPlaceRepository places() {
+        return places;
     }
 
     public static ScheduleRepository schedules() {

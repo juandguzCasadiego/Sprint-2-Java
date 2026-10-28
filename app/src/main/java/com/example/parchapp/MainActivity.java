@@ -43,6 +43,7 @@ public class MainActivity extends AppCompatActivity {
             findViewById(R.id.restored_session_card).setVisibility(View.VISIBLE);
             ((android.widget.TextView) findViewById(R.id.restored_user_name)).setText(restored.getFirstName());
             ((android.widget.TextView) findViewById(R.id.restored_user_initials)).setText(restored.getInitials());
+            bindProfileDetails();
             ((android.widget.TextView) findViewById(R.id.restored_user_email)).setText(restored.getEmail());
             continueButton.setText("Continue as " + restored.getFirstName());
             continueButton.setOnClickListener(v -> openDashboard(restored));
@@ -146,5 +147,29 @@ public class MainActivity extends AppCompatActivity {
 
     private void showMessage(String message) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    }
+
+    /* Program and verification come from the backend profile (getProfile); hidden until known. */
+    private void bindProfileDetails() {
+        android.widget.TextView program = findViewById(R.id.restored_user_program);
+        View verified = findViewById(R.id.restored_user_verified);
+        program.setVisibility(View.GONE);
+        verified.setVisibility(View.GONE);
+        Repositories.profiles().getProfile(new Callback<com.example.parchapp.data.ProfileRepository.Profile>() {
+            @Override
+            public void onSuccess(com.example.parchapp.data.ProfileRepository.Profile profile) {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                program.setText(profile.program);
+                program.setVisibility(profile.program.isEmpty() ? View.GONE : View.VISIBLE);
+                verified.setVisibility(profile.verified ? View.VISIBLE : View.GONE);
+            }
+
+            @Override
+            public void onError(Exception error) {
+                // the card still works with the name and email from the session
+            }
+        });
     }
 }

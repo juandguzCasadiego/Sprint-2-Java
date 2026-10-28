@@ -11,6 +11,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Patterns;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -59,6 +60,7 @@ public class CreateGroupActivity extends AppCompatActivity {
     private TextView groupLinkText;
     private LinearLayout pendingList;
     private TextView pendingCount;
+    private String category;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,18 +85,12 @@ public class CreateGroupActivity extends AppCompatActivity {
         findViewById(R.id.back_group_button).setOnClickListener(v -> finish());
         dateInput.setOnClickListener(v -> pickDate());
         timeInput.setOnClickListener(v -> pickTime());
-        findViewById(R.id.copy_group_link_button).setOnClickListener(v -> copyGroupLink());
-        findViewById(R.id.share_group_link_button).setOnClickListener(v -> shareGroupLink());
-        findViewById(R.id.show_qr_button).setOnClickListener(v -> {
-            tracker.trackFeature(AnalyticsEvents.FEATURE_INVITATIONS, SCREEN);
-            View qr = findViewById(R.id.qr_container);
-            if (qr.getVisibility() == View.VISIBLE) {
-                qr.setVisibility(View.GONE);
-            } else {
-                showQrCode();
-                qr.setVisibility(View.VISIBLE);
-            }
-        });
+        // A join link only exists once the backend has created the group (shareLinks); the group screen's Share button creates it. Nothing here pretends a link already exists.
+        groupLinkText.setText("Your join link is created with the group");
+        findViewById(R.id.copy_group_link_button).setOnClickListener(v -> explainLink());
+        findViewById(R.id.share_group_link_button).setOnClickListener(v -> explainLink());
+        findViewById(R.id.show_qr_button).setOnClickListener(v -> explainLink());
+        addCategoryChips();
         findViewById(R.id.add_email_button).setOnClickListener(v -> addEmail());
         findViewById(R.id.create_group_button).setOnClickListener(v -> createGroup());
         findViewById(R.id.cancel_create_group).setOnClickListener(v -> finish());
@@ -108,8 +104,7 @@ public class CreateGroupActivity extends AppCompatActivity {
         renderInvites();
     }
 
-    // opens the android calendar. past days can not be chosen
-    // the date is saved as yyyy-MM-dd because ExternalActions reads it like that for the calendar
+    // opens the android calendar. past days can not be chosen the date is saved as yyyy-MM-dd because ExternalActions reads it like that for the calendar
     private void pickDate() {
         Calendar today = Calendar.getInstance();
         DatePickerDialog dialog = new DatePickerDialog(this, (picker, year, month, day) -> {
@@ -193,7 +188,11 @@ public class CreateGroupActivity extends AppCompatActivity {
 
         View createButton = findViewById(R.id.create_group_button);
         createButton.setEnabled(false);
-        Repositories.groups().createGroup(group, new Callback<Group>() {
+        if (category == null) {
+            toast("Choose a category for the group");
+            return;
+        }
+        Repositories.groups().createGroup(group, category, new Callback<Group>() {
             @Override
             public void onSuccess(Group saved) {
                 tracker.trackFeature(AnalyticsEvents.FEATURE_GROUPS, SCREEN);
@@ -228,7 +227,8 @@ public class CreateGroupActivity extends AppCompatActivity {
                 tracker.track(AnalyticsEvents.ACTIVITY_CREATED, params);
                 toast("Group created");
                 startActivity(new Intent(CreateGroupActivity.this, ActivityCreatedActivity.class)
-                        .putExtra(ActivityCreatedActivity.EXTRA_TITLE, saved.getTitle())
+                        .putExtra(ActivityCreatedActivity.EXTRA_ACTIVITY_ID, saved.getId())
+                            .putExtra(ActivityCreatedActivity.EXTRA_TITLE, saved.getTitle())
                         .putExtra(ActivityCreatedActivity.EXTRA_DATE, saved.getDate())
                         .putExtra(ActivityCreatedActivity.EXTRA_TIME, saved.getTime())
                         .putExtra(ActivityCreatedActivity.EXTRA_LOCATION, saved.getLocation()));
@@ -250,49 +250,42 @@ public class CreateGroupActivity extends AppCompatActivity {
         });
     }
 
-    // the link uses the group name, for example "Bowling Night" -> parchapp.me/g/bowling-night
-    private String groupLink() {
-        String slug = nameInput.getText().toString().trim().toLowerCase(Locale.US)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("(^-|-$)", "");
-        String link = "parchapp.me/g/" + (slug.isEmpty() ? "new-group" : slug);
-        groupLinkText.setText(link);
-        return link;
-    }
-
-    private void copyGroupLink() {
+    private void explainLink() {
         tracker.trackFeature(AnalyticsEvents.FEATURE_INVITATIONS, SCREEN);
-        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        clipboard.setPrimaryClip(ClipData.newPlainText("Group link", groupLink()));
-        toast("Group link copied");
+        toast("Create the group first. Then share its join link from the group screen.");
     }
 
-    // opens the android share menu (whatsapp, email, etc.) with the group link
-    private void shareGroupLink() {
-        tracker.trackFeature(AnalyticsEvents.FEATURE_INVITATIONS, SCREEN);
-        Intent send = new Intent(Intent.ACTION_SEND);
-        send.setType("text/plain");
-        send.putExtra(Intent.EXTRA_TEXT, "Join my group on ParchApp: " + groupLink());
-        startActivity(Intent.createChooser(send, "Share group link"));
-    }
-
-    // makes a real qr code with the group link. black and white pixels from the zxing matrix
-    private void showQrCode() {
-        String link = groupLink();
-        try {
-            BitMatrix matrix = new QRCodeWriter().encode(link, BarcodeFormat.QR_CODE, QR_SIZE, QR_SIZE);
-            Bitmap bitmap = Bitmap.createBitmap(QR_SIZE, QR_SIZE, Bitmap.Config.RGB_565);
-            for (int x = 0; x < QR_SIZE; x++) {
-                for (int y = 0; y < QR_SIZE; y++) {
-                    bitmap.setPixel(x, y, matrix.get(x, y) ? Color.BLACK : Color.WHITE);
+    /* The backend needs a category for every group (study, social, sports, living). */
+    private void addCategoryChips() {
+        ViewGroup parent = (ViewGroup) nameInput.getParent();
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, 18, 0, 0);
+        String[][] options = {{"study", "Study"}, {"social", "Social"}, {"sports", "Sports"}, {"living", "Living"}};
+        List<TextView> chips = new ArrayList<>();
+        for (String[] option : options) {
+            TextView chip = new TextView(this);
+            chip.setText(option[1]);
+            chip.setTextSize(12);
+            chip.setGravity(android.view.Gravity.CENTER);
+            chip.setPadding(30, 16, 30, 16);
+            chip.setBackgroundResource(R.drawable.bg_chip_unselected);
+            chip.setTextColor(getColor(R.color.brand_dark));
+            chip.setOnClickListener(v -> {
+                category = option[0];
+                for (TextView other : chips) {
+                    other.setBackgroundResource(R.drawable.bg_chip_unselected);
+                    other.setTextColor(getColor(R.color.brand_dark));
                 }
-            }
-            ((ImageView) findViewById(R.id.qr_image)).setImageBitmap(bitmap);
-            String name = nameInput.getText().toString().trim();
-            ((TextView) findViewById(R.id.qr_caption_text)).setText("Scan to join \"" + name + "\" instantly");
-        } catch (WriterException e) {
-            toast("Could not create the QR code");
+                chip.setBackgroundResource(R.drawable.bg_chip_selected);
+                chip.setTextColor(getColor(R.color.brand_primary));
+            });
+            chips.add(chip);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+            params.setMarginEnd(10);
+            row.addView(chip, params);
         }
+        parent.addView(row, parent.indexOfChild(nameInput) + 1);
     }
 
     private void toast(String message) {

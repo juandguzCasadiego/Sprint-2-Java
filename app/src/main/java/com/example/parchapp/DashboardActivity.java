@@ -28,7 +28,12 @@ import com.example.parchapp.data.DistanceMatrixClient;
 import com.example.parchapp.data.DemoData;
 import com.example.parchapp.data.GroupListener;
 import com.example.parchapp.data.Repositories;
+import com.example.parchapp.data.ProfileRepository;
+import com.example.parchapp.data.TravelTimeService;
 import com.example.parchapp.domain.PlanContext;
+import com.example.parchapp.domain.model.DaySchedule;
+import com.example.parchapp.domain.model.Member;
+import com.example.parchapp.domain.model.TimeSlot;
 import com.example.parchapp.domain.StatusService;
 import com.example.parchapp.domain.model.Group;
 import com.example.parchapp.domain.model.PlannedActivity;
@@ -41,6 +46,7 @@ import com.google.android.gms.tasks.CancellationTokenSource;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Locale;
 
 public class DashboardActivity extends AppCompatActivity implements GroupListener, StatusService.Listener {
 
@@ -56,7 +62,9 @@ public class DashboardActivity extends AppCompatActivity implements GroupListene
     private final List<Group> loadedGroups = new ArrayList<>();
     private String rsvpGroupId;
     private PlannedActivity latestActivity;
-    private final DistanceMatrixClient distanceMatrix = new DistanceMatrixClient(BuildConfig.MAPS_API_KEY);
+    private final List<PlannedActivity> loadedActivities = new ArrayList<>();
+    private TravelTimeService travelTime;
+    private String inviteLink;
     private ConnectivityMonitor connectivity;
     private boolean askedLocation;
 
@@ -66,6 +74,7 @@ public class DashboardActivity extends AppCompatActivity implements GroupListene
         setContentView(R.layout.activity_dashboard);
 
         bindUser(UserSession.getCurrentUser());
+        travelTime = new TravelTimeService(this);
 
         displayFreeUntil = findViewById(R.id.display_free_until);
         displayNextActivity = findViewById(R.id.display_next_activity);
@@ -82,8 +91,9 @@ public class DashboardActivity extends AppCompatActivity implements GroupListene
         findViewById(R.id.header_user_initials).setOnClickListener(this::openAccountMenu);
 
         findViewById(R.id.copy_link_button).setOnClickListener(v -> copyInviteLink());
-        findViewById(R.id.btn_edit_free_until).setOnClickListener(v -> openQuickStatusSheet());
-        findViewById(R.id.btn_edit_next_activity).setOnClickListener(v -> openQuickStatusSheet());
+        // Both values come from the backend (availability and activities); the Schedule screen shows the details.
+        findViewById(R.id.btn_edit_free_until).setOnClickListener(v -> startActivity(new Intent(this, ScheduleActivity.class)));
+        findViewById(R.id.btn_edit_next_activity).setOnClickListener(v -> startActivity(new Intent(this, ScheduleActivity.class)));
         findViewById(R.id.compare_button).setOnClickListener(v -> {
             tracker.trackFeature(AnalyticsEvents.FEATURE_COMPARE_AVAILABILITY, SCREEN);
             openCompareAvailability();
@@ -139,6 +149,8 @@ public class DashboardActivity extends AppCompatActivity implements GroupListene
         status.addListener(this);
         status.startMotionDetection();
         onStatusChanged(status);
+        status.refreshFromBackend();
+        loadFreeUntil();
     }
 
     @Override
@@ -180,14 +192,15 @@ public class DashboardActivity extends AppCompatActivity implements GroupListene
 
     @Override
     public void onStatusChanged(StatusService status) {
-        displayFreeUntil.setText(status.getFreeUntil());
-        displayNextActivity.setText(status.getNextActivity());
-        // F1: the live status card shows the status the user broadcasts, and where it came from.
+        // F1: the live status card shows the presence saved in the backend profile, and its source.
         String availability = status.getAvailability();
-        ((TextView) findViewById(R.id.status_title)).setText(
-                "Available now".equalsIgnoreCase(availability) ? getString(R.string.available_now) : availability);
+        ((TextView) findViewById(R.id.status_title)).setText(availability.isEmpty() ? "Checking your status\u2026"
+                : "Available now".equalsIgnoreCase(availability) ? getString(R.string.available_now) : availability);
         ((TextView) findViewById(R.id.status_source_chip)).setText(
                 status.isFromMotion() ? "\u25CE Motion sensor" : "\u25CF Live Sync");
+        String code = StatusService.codeFor(availability);
+        ((TextView) findViewById(R.id.status_header_chip)).setText(availability.isEmpty() ? "\u25CF \u2026"
+                : ProfileRepository.ACTIVE.equals(code) ? "\u25CF FREE" : "\u25CF " + availability.toUpperCase(Locale.ROOT));
     }
 
     /* F1: the accelerometer saw sustained movement. Suggest the status; the user decides. */
@@ -242,19 +255,30 @@ public class DashboardActivity extends AppCompatActivity implements GroupListene
         TextView travel = findViewById(R.id.plan_travel_text);
         travel.setVisibility(View.VISIBLE);
         findViewById(R.id.plan_late_warning).setVisibility(View.GONE);
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-            travel.setText("\u279C  Allow location to see your travel time");
-            if (!askedLocation) {
-                askedLocation = true;
-                ActivityCompat.requestPermissions(this, new String[]{
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION}, LOCATION_REQUEST);
-            }
-            return;
+        if (!travelTime.hasLocationPermission() && !askedLocation) {
+            askedLocation = true;
+            ActivityCompat.requestPermissions(this, new String[]{
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION}, LOCATION_REQUEST);
         }
         travel.setText("\u279C  Finding your travel time\u2026");
-        readLocationFor(activity);
+        travelTime.travelTo(activity, new TravelTimeService.Listener() {
+            @Override
+            public void onTravel(TravelTimeService.Result result) {
+                if (isFinishing() || isDestroyed() || activity != latestActivity) {
+                    return;
+                }
+                travel.setText(TravelTimeService.describe(result));
+                findViewById(R.id.plan_late_warning).setVisibility(result.late ? View.VISIBLE : View.GONE);
+            }
+
+            @Override
+            public void onProblem(TravelTimeService.Problem problem) {
+                if (!isFinishing() && !isDestroyed() && activity == latestActivity) {
+                    travel.setText(TravelTimeService.describe(problem));
+                }
+            }
+        });
     }
 
     @Override
@@ -265,91 +289,49 @@ public class DashboardActivity extends AppCompatActivity implements GroupListene
         }
     }
 
-    @SuppressLint("MissingPermission")
-    private void readLocationFor(PlannedActivity activity) {
-        com.google.android.gms.location.FusedLocationProviderClient client =
-                LocationServices.getFusedLocationProviderClient(this);
-        client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, new CancellationTokenSource().getToken())
-                .addOnSuccessListener(this, location -> {
-                    if (location != null) {
-                        findTravelMinutes(activity, location);
-                    } else {
-                        useLastKnownLocation(client, activity);
-                    }
-                })
-                .addOnFailureListener(this, e -> useLastKnownLocation(client, activity));
-    }
+    // ---------- Quick status values, from the backend ----------
 
-    /* No fresh fix (indoors, or GPS still warming up): the last known position is good enough. */
-    @SuppressLint("MissingPermission")
-    private void useLastKnownLocation(com.google.android.gms.location.FusedLocationProviderClient client,
-                                      PlannedActivity activity) {
-        client.getLastLocation()
-                .addOnSuccessListener(this, last -> {
-                    if (last != null) {
-                        findTravelMinutes(activity, last);
-                    } else {
-                        showTravel(activity, -1, null);
-                    }
-                })
-                .addOnFailureListener(this, e -> showTravel(activity, -1, null));
-    }
-
-    private void findTravelMinutes(PlannedActivity activity, Location from) {
-        double[] venue = PlanContext.venueCoordinates(activity.getLocation());
-        Integer cached = activity.getId() == null ? null
-                : Repositories.activities().getCachedTravelMinutes(activity.getId());
-        if (cached != null) {
-            showTravel(activity, cached, "Google Maps");
-            return;
-        }
-        distanceMatrix.getTravelMinutes(from.getLatitude(), from.getLongitude(), venue[0], venue[1],
-                new Callback<Integer>() {
+    /* Free until: the start of my next busy block today, from my availability snapshot. */
+    private void loadFreeUntil() {
+        Calendar now = Calendar.getInstance(PlanContext.bogota());
+        int nowMinute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+        java.text.SimpleDateFormat key = new java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        key.setTimeZone(PlanContext.bogota());
+        TextView label = findViewById(R.id.free_until_label);
+        Repositories.schedules().getDay(key.format(now.getTime()), new ArrayList<>(),
+                new Callback<List<DaySchedule>>() {
                     @Override
-                    public void onSuccess(Integer minutes) {
-                        if (activity.getId() != null) {
-                            Repositories.activities().cacheTravelMinutes(activity.getId(), minutes);
+                    public void onSuccess(List<DaySchedule> schedules) {
+                        String me = UserSession.getCurrentUser().getId();
+                        DaySchedule mine = null;
+                        for (DaySchedule schedule : schedules) {
+                            if (schedule.getOwnerId().equals(me)) {
+                                mine = schedule;
+                            }
                         }
-                        showTravel(activity, minutes, "Google Maps");
+                        if (mine == null && !schedules.isEmpty()) {
+                            mine = schedules.get(0);
+                        }
+                        if (mine == null || !mine.isKnown()) {
+                            label.setText("FREE UNTIL");
+                            displayFreeUntil.setText("Calendar not synced");
+                            return;
+                        }
+                        int[] window = PlanContext.freeWindow(mine.getBusy(), nowMinute);
+                        if (window[0] == PlanContext.BUSY_NOW) {
+                            label.setText("BUSY UNTIL");
+                            displayFreeUntil.setText(TimeSlot.formatMinute(window[1]));
+                        } else {
+                            label.setText("FREE UNTIL");
+                            displayFreeUntil.setText(window[1] >= 24 * 60 ? "End of day" : TimeSlot.formatMinute(window[1]));
+                        }
                     }
 
                     @Override
                     public void onError(Exception error) {
-                        // Timeout and fallback: Maps did not answer in 8 s, so estimate the walking time.
-                        showTravel(activity, PlanContext.walkingMinutes(from.getLatitude(), from.getLongitude(),
-                                venue[0], venue[1]), null);
+                        displayFreeUntil.setText("Unavailable");
                     }
                 });
-    }
-
-    /* source is "Google Maps", or null for the walking estimate; minutes < 0 means unknown. */
-    private void showTravel(PlannedActivity activity, int minutes, String source) {
-        if (isFinishing() || isDestroyed() || activity != latestActivity) {
-            return;
-        }
-        TextView travel = findViewById(R.id.plan_travel_text);
-        if (minutes < 0) {
-            travel.setText("\u279C  Travel time not available right now");
-            return;
-        }
-        String place = PlanContext.isKnownVenue(activity.getLocation()) ? activity.getLocation() : "campus";
-        travel.setText(source != null
-                ? "\u279C  " + minutes + " min to " + place + " \u00B7 " + source
-                : "\u279C  \u2248 " + minutes + " min walking to " + place + " \u00B7 estimate, Maps unavailable");
-
-        Calendar now = Calendar.getInstance(PlanContext.bogota());
-        int nowMinute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
-        boolean late = PlanContext.isToday(activity.getDate(), now)
-                && PlanContext.isLate(nowMinute, minutes, PlanContext.startMinute(activity.getTime()),
-                PlanContext.endMinute(activity.getTime()));
-        findViewById(R.id.plan_late_warning).setVisibility(late ? View.VISIBLE : View.GONE);
-    }
-
-    private void openQuickStatusSheet() {
-        QuickStatusSheet.newInstance((freeUntil, nextActivity) -> {
-            Repositories.status().updateQuickStatus(freeUntil, nextActivity);
-            toast("Status updated");
-        }).show(getSupportFragmentManager(), "quick_status");
     }
 
     private void openPlanDetails() {
@@ -406,19 +388,9 @@ public class DashboardActivity extends AppCompatActivity implements GroupListene
                 new Callback<List<PlannedActivity>>() {
                     @Override
                     public void onSuccess(List<PlannedActivity> activities) {
-                        if (activities.isEmpty()) {
-                            findViewById(R.id.plan_card_study).setVisibility(View.GONE);
-                            return;
-                        }
-                        PlannedActivity activity = activities.get(0);
-                        latestActivity = activity;
-                        findViewById(R.id.plan_card_study).setVisibility(View.VISIBLE);
-                        ((TextView) findViewById(R.id.plan_status_text)).setText(activity.getStatus());
-                        ((TextView) findViewById(R.id.plan_title_text)).setText(activity.getTitle());
-                        ((TextView) findViewById(R.id.plan_time_text)).setText(
-                                joinNonEmpty(activity.getDate(), activity.getTime()));
-                        ((TextView) findViewById(R.id.plan_location_text)).setText(activity.getLocation());
-                        updatePlanContext(activity);
+                        loadedActivities.clear();
+                        loadedActivities.addAll(activities);
+                        bindActivities();
                     }
 
                     @Override
@@ -426,6 +398,85 @@ public class DashboardActivity extends AppCompatActivity implements GroupListene
                         findViewById(R.id.plan_card_study).setVisibility(View.GONE);
                     }
                 });
+    }
+
+    private void bindActivities() {
+        Calendar now = Calendar.getInstance(PlanContext.bogota());
+        int nowMinute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+        int today = PlanContext.countToday(loadedActivities, now);
+        ((TextView) findViewById(R.id.active_plans_text)).setText(today == 1
+                ? "You have 1 active plan today" : "You have " + today + " active plans today");
+
+        PlannedActivity next = PlanContext.nextPlan(loadedActivities, now, nowMinute);
+        displayNextActivity.setText(next != null ? next.getTitle() : "No upcoming plans");
+
+        PlannedActivity shown = next != null ? next : loadedActivities.isEmpty() ? null : loadedActivities.get(0);
+        if (shown == null) {
+            latestActivity = null;
+            findViewById(R.id.plan_card_study).setVisibility(View.GONE);
+            bindRsvpPlan();
+            return;
+        }
+        latestActivity = shown;
+        findViewById(R.id.plan_card_study).setVisibility(View.VISIBLE);
+        ((TextView) findViewById(R.id.plan_status_text)).setText(shown.getStatus());
+        ((TextView) findViewById(R.id.plan_title_text)).setText(shown.getTitle());
+        ((TextView) findViewById(R.id.plan_time_text)).setText(joinNonEmpty(shown.getDate(), shown.getTime()));
+        ((TextView) findViewById(R.id.plan_location_text)).setText(
+                shown.getLocation().isEmpty() ? "Location not specified" : shown.getLocation());
+        bindPlanAvatars(shown);
+        bindRsvpPlan();
+        updatePlanContext(shown);
+    }
+
+    /* The people of the plan's group, from the group document: up to three initials and "+N". */
+    private void bindPlanAvatars(PlannedActivity activity) {
+        int[] ids = {R.id.plan_avatar_1, R.id.plan_avatar_2, R.id.plan_avatar_3};
+        Group group = groupById(activity.getGroupId());
+        List<Member> members = group == null ? new ArrayList<>() : group.getMembers();
+        for (int i = 0; i < ids.length; i++) {
+            TextView avatar = findViewById(ids[i]);
+            if (i < members.size()) {
+                avatar.setVisibility(View.VISIBLE);
+                avatar.setText(members.get(i).getInitials());
+            } else {
+                avatar.setVisibility(View.GONE);
+            }
+        }
+        TextView more = findViewById(R.id.plan_avatar_more);
+        more.setVisibility(members.size() > ids.length ? View.VISIBLE : View.GONE);
+        more.setText("+" + (members.size() - ids.length));
+    }
+
+    /* The RSVP card shows the first group's latest activity: its real time and place. */
+    private void bindRsvpPlan() {
+        if (loadedGroups.isEmpty()) {
+            return;
+        }
+        Group group = loadedGroups.get(0);
+        PlannedActivity latest = null;
+        for (PlannedActivity activity : loadedActivities) {
+            if (activity.getGroupId().equals(group.getId())
+                    && (latest == null || activity.getCreatedAt() > latest.getCreatedAt())) {
+                latest = activity;
+            }
+        }
+        String title = latest != null ? latest.getTitle() : group.getPlanTitle();
+        ((TextView) findViewById(R.id.rsvp_plan_title)).setText(title);
+        ((TextView) findViewById(R.id.rsvp_plan_time)).setText(latest != null
+                ? joinNonEmpty(latest.getDate(), latest.getTime()) : "No time set yet");
+        ((TextView) findViewById(R.id.rsvp_plan_location)).setText(latest != null && !latest.getLocation().isEmpty()
+                ? latest.getLocation() : "No place set yet");
+        findViewById(R.id.plan_card_rsvp).setVisibility(title.isEmpty() ? View.GONE : View.VISIBLE);
+    }
+
+    private Group groupById(String id) {
+        for (Group group : loadedGroups) {
+            if (group.getId().equals(id)) {
+                return group;
+            }
+        }
+        return null;
     }
 
     private void bindGroups() {
@@ -437,13 +488,10 @@ public class DashboardActivity extends AppCompatActivity implements GroupListene
             findViewById(R.id.plan_card_rsvp).setVisibility(View.GONE);
             return;
         }
-        Group group = loadedGroups.get(0);
-        ((TextView) findViewById(R.id.rsvp_plan_title)).setText(group.getPlanTitle());
-        ((TextView) findViewById(R.id.rsvp_plan_time)).setText(
-                group.getPlanTitle().isEmpty() ? "No active plan" : "Schedule not specified");
-        ((TextView) findViewById(R.id.rsvp_plan_location)).setText("Location not specified");
-        findViewById(R.id.plan_card_rsvp).setVisibility(
-                group.getPlanTitle().isEmpty() ? View.GONE : View.VISIBLE);
+        bindRsvpPlan();
+        if (latestActivity != null) {
+            bindPlanAvatars(latestActivity);
+        }
     }
 
     private void bindGroupCard(int index, int titleId, int subtitleId, int iconId, int cardId) {
@@ -512,9 +560,30 @@ public class DashboardActivity extends AppCompatActivity implements GroupListene
         maybeButton.setTextColor(getColor(isMaybe ? android.R.color.white : R.color.brand_slate));
     }
 
+    /* The invite link is a real share link stored by the backend (shareLinks), created on demand. */
     private void copyInviteLink() {
         tracker.trackFeature(AnalyticsEvents.FEATURE_INVITATIONS, SCREEN);
-        String link = ((TextView) findViewById(R.id.invite_link_text)).getText().toString();
+        if (inviteLink != null) {
+            copyToClipboard(inviteLink);
+            return;
+        }
+        ((TextView) findViewById(R.id.invite_link_text)).setText("Creating your link\u2026");
+        Repositories.profiles().createShareLink("profile", UserSession.getCurrentUser().getId(), new Callback<String>() {
+            @Override
+            public void onSuccess(String token) {
+                inviteLink = ProfileRepository.linkFor(token);
+                ((TextView) findViewById(R.id.invite_link_text)).setText(inviteLink);
+                copyToClipboard(inviteLink);
+            }
+
+            @Override
+            public void onError(Exception error) {
+                ((TextView) findViewById(R.id.invite_link_text)).setText("Could not create a link. Try again.");
+            }
+        });
+    }
+
+    private void copyToClipboard(String link) {
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         clipboard.setPrimaryClip(ClipData.newPlainText("Invite link", link));
         toast(getString(R.string.link_copied));
@@ -527,7 +596,7 @@ public class DashboardActivity extends AppCompatActivity implements GroupListene
     private void bindUser(UserProfile user) {
         ((TextView) findViewById(R.id.header_user_initials)).setText(user.getInitials());
         ((TextView) findViewById(R.id.greeting_text)).setText("Hello, " + user.getFirstName() + "! 👋");
-        ((TextView) findViewById(R.id.active_plans_text)).setText("You have " + user.getActivePlans() + " active plans today");
-        ((TextView) findViewById(R.id.invite_link_text)).setText(user.getInviteLink());
+        ((TextView) findViewById(R.id.active_plans_text)).setText("Loading your plans\u2026");
+        ((TextView) findViewById(R.id.invite_link_text)).setText("Tap Copy Link to create your invite link");
     }
 }

@@ -13,6 +13,11 @@ public interface ActivityRepository {
 
     void getActivities(String userId, Callback<List<PlannedActivity>> callback);
 
+    void getActivity(String activityId, Callback<PlannedActivity> callback);
+
+    /* The organiser confirms the plan: status becomes CONFIRMED. */
+    void confirmActivity(String activityId, Callback<PlannedActivity> callback);
+
     /* F7: travel minutes to this activity measured recently (Google Maps), or null. */
     @Nullable
     Integer getCachedTravelMinutes(String activityId);

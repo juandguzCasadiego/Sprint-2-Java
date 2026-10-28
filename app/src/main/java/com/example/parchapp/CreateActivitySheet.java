@@ -16,7 +16,9 @@ import androidx.annotation.Nullable;
 import com.example.parchapp.analytics.AnalyticsEvents;
 import com.example.parchapp.analytics.AnalyticsTracker;
 import com.example.parchapp.analytics.ActivityCreationTelemetry;
+import com.example.parchapp.data.CampusPlaceRepository;
 import com.example.parchapp.data.Repositories;
+import com.example.parchapp.domain.model.CampusPlace;
 import com.example.parchapp.domain.model.Group;
 import com.example.parchapp.domain.model.PlannedActivity;
 import com.example.parchapp.util.Callback;
@@ -39,6 +41,7 @@ public class CreateActivitySheet extends BottomSheetDialogFragment {
     private static final int NO_SLOT = -1;
 
     private TextView selectedGroupChip;
+    private java.util.List<CampusPlace> places = new java.util.ArrayList<>();
     private String selectedGroupId;
 
     /** In this examples, it opens the sheet with a slot chosen in Compare Availability, so BQ3 can be measured in this case. */
@@ -90,6 +93,7 @@ public class CreateActivitySheet extends BottomSheetDialogFragment {
         EditText dateInput = view.findViewById(R.id.input_activity_date);
         EditText timeInput = view.findViewById(R.id.input_activity_time);
         EditText locationInput = view.findViewById(R.id.input_activity_location);
+        loadPlaceChips(view.findViewById(R.id.place_chips), locationInput);
         if (suggestedTime != null) {
             timeInput.setText(suggestedTime);
         }
@@ -115,10 +119,16 @@ public class CreateActivitySheet extends BottomSheetDialogFragment {
                 return;
             }
             String time = timeInput.getText().toString().trim();
+            String location = locationInput.getText().toString().trim();
             PlannedActivity activity = new PlannedActivity(null, selectedGroupId, title, "other",
                     dateInput.getText().toString().trim(), time,
-                    locationInput.getText().toString().trim(), PlannedActivity.STATUS_PROPOSED,
+                    location, PlannedActivity.STATUS_PROPOSED,
                     System.currentTimeMillis(), args.getInt(ARG_GROUP_SIZE, 0), slotPosition != NO_SLOT);
+            // if the place is one of campusAreas we save its id, so travel time knows the coordinates
+            CampusPlace place = CampusPlaceRepository.placeOf(activity, places);
+            if (place != null) {
+                activity = activity.withLocationArea(place.getId());
+            }
 
             createButton.setEnabled(false);
             String creationSessionId = UUID.randomUUID().toString();
@@ -138,6 +148,7 @@ public class CreateActivitySheet extends BottomSheetDialogFragment {
                         dismiss();
                     }
                     host.startActivity(new Intent(host, ActivityCreatedActivity.class)
+                            .putExtra(ActivityCreatedActivity.EXTRA_ACTIVITY_ID, saved.getId())
                             .putExtra(ActivityCreatedActivity.EXTRA_TITLE, saved.getTitle())
                             .putExtra(ActivityCreatedActivity.EXTRA_DATE, saved.getDate())
                             .putExtra(ActivityCreatedActivity.EXTRA_TIME, saved.getTime())
@@ -234,5 +245,37 @@ public class CreateActivitySheet extends BottomSheetDialogFragment {
         chip.setVisibility(View.VISIBLE);
         chip.setText(group.getName());
         chip.setOnClickListener(v -> selectGroup(chip, group.getId()));
+    }
+
+    /* Places come from campusAreas in Firestore; tapping one writes its name in the location field. */
+    private void loadPlaceChips(android.widget.LinearLayout chips, EditText locationInput) {
+        Repositories.places().getPlaces(new Callback<java.util.List<CampusPlace>>() {
+            @Override
+            public void onSuccess(java.util.List<CampusPlace> loaded) {
+                places = loaded;
+                if (!isAdded()) {
+                    return;
+                }
+                chips.removeAllViews();
+                for (CampusPlace place : loaded) {
+                    TextView chip = new TextView(requireContext());
+                    chip.setText(place.getName());
+                    chip.setTextSize(11);
+                    chip.setTextColor(requireContext().getColor(R.color.brand_primary));
+                    chip.setBackgroundResource(R.drawable.bg_chip_unselected);
+                    chip.setPadding(28, 14, 28, 14);
+                    android.widget.LinearLayout.LayoutParams params = new android.widget.LinearLayout.LayoutParams(
+                            android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+                    params.setMarginEnd(12);
+                    chip.setOnClickListener(v -> locationInput.setText(place.getName()));
+                    chips.addView(chip, params);
+                }
+            }
+
+            @Override
+            public void onError(Exception error) {
+                places = new java.util.ArrayList<>();
+            }
+        });
     }
 }

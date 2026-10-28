@@ -116,7 +116,6 @@
                 android:hint="e.g. Bowling Night"
                 android:paddingStart="14dp"
                 android:paddingEnd="14dp"
-                android:text="Bowling Night"
                 android:textColor="@color/brand_dark"
                 android:textColorHint="@color/brand_slate"
                 android:textSize="13sp" />

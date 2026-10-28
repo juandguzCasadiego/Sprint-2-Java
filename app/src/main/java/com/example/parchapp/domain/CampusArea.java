@@ -1,21 +1,24 @@
 package com.example.parchapp.domain;
 
-import android.location.Location;
+import com.example.parchapp.domain.model.CampusPlace;
 
-// f1: tells if a location is inside the campus.
-// the campus is a circle around the center of the university.
+import java.util.List;
+
+// f1: tells if a location is inside the campus. the campus is not hardcoded anymore, it is the places of campusAreas in firestore: you are on campus if you are close to any of them
 public final class CampusArea {
-    // more or less the center of the campus (bogota) and the radius in meters
-    private static final double CAMPUS_LAT = 4.6015;
-    private static final double CAMPUS_LNG = -74.0661;
-    private static final float CAMPUS_RADIUS_METERS = 600;
+    // radius in meters around each campus place
+    private static final double PLACE_RADIUS_METERS = 600;
 
     private CampusArea() {
     }
 
-    public static boolean isOnCampus(double lat, double lng) {
-        float[] distance = new float[1];
-        Location.distanceBetween(lat, lng, CAMPUS_LAT, CAMPUS_LNG, distance);
-        return distance[0] <= CAMPUS_RADIUS_METERS;
+    public static boolean isOnCampus(double lat, double lng, List<CampusPlace> places) {
+        for (CampusPlace place : places) {
+            if (place.hasCoordinates()
+                    && PlanContext.distanceMeters(lat, lng, place.getLat(), place.getLng()) <= PLACE_RADIUS_METERS) {
+                return true;
+            }
+        }
+        return false;
     }
 }

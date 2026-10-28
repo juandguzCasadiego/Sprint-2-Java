@@ -22,8 +22,12 @@ import com.example.parchapp.analytics.AnalyticsTracker;
 import com.example.parchapp.data.DistanceMatrixClient;
 import com.example.parchapp.data.GroupListener;
 import com.example.parchapp.data.Repositories;
-import com.example.parchapp.domain.CampusArea;
+import com.example.parchapp.data.ScheduleRepository;
+import com.example.parchapp.data.TravelTimeService;
+import com.example.parchapp.domain.PlanContext;
 import com.example.parchapp.domain.availability.AvailabilityEngine;
+import com.example.parchapp.domain.model.DaySchedule;
+import com.example.parchapp.domain.model.PlannedActivity;
 import com.example.parchapp.domain.model.Group;
 import com.example.parchapp.domain.model.Member;
 import com.example.parchapp.domain.model.TimeSlot;
@@ -33,6 +37,7 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.CancellationTokenSource;
 
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
@@ -43,14 +48,12 @@ public class GroupDetailActivity extends AppCompatActivity implements GroupListe
     private static final String SCREEN = "group_detail";
     private static final int LOCATION_REQUEST = 10;
 
-    // demo data of the plan in the card: it starts today at 8:00 pm in main st apartment
-    private static final int PLAN_START_MINUTE = 20 * 60;
-    private static final double VENUE_LAT = 4.6280;
-    private static final double VENUE_LNG = -74.0640;
-
     private final AvailabilityEngine engine = new AvailabilityEngine();
     private final AnalyticsTracker tracker = AnalyticsTracker.getInstance();
-    private final DistanceMatrixClient distanceMatrix = new DistanceMatrixClient(BuildConfig.MAPS_API_KEY);
+    private TravelTimeService travelTime;
+    /* This group's activities from Firestore: the next one fills the plan card, past ones the history. */
+    private final List<PlannedActivity> groupActivities = new ArrayList<>();
+    private PlannedActivity nextPlan;
     private String groupId;
     private Group loadedGroup;
     private TextView campusText;
@@ -63,6 +66,7 @@ public class GroupDetailActivity extends AppCompatActivity implements GroupListe
         setContentView(R.layout.activity_group_detail);
 
         groupId = getIntent().getStringExtra(EXTRA_GROUP_ID);
+        travelTime = new TravelTimeService(this);
 
         findViewById(R.id.back_button).setOnClickListener(v -> finish());
         findViewById(R.id.share_button).setOnClickListener(v -> {
@@ -76,17 +80,19 @@ public class GroupDetailActivity extends AppCompatActivity implements GroupListe
             CompareAvailabilitySheet.newInstance(groupId).show(getSupportFragmentManager(), "compare_roommates");
         });
         findViewById(R.id.plan_details_button).setOnClickListener(v -> {
-            if (loadedGroup == null || loadedGroup.getPlanTitle().isEmpty()) {
-                toast("No activity data is available");
+            if (nextPlan == null) {
+                toast("This group has no upcoming plan");
                 return;
             }
-            PlanDetailsSheet.newInstance(loadedGroup.getPlanTitle(), "", "", "", "")
-                    .show(getSupportFragmentManager(), "plan_details");
+            PlanDetailsSheet.newInstance(nextPlan.getTitle(), nextPlan.getStatus(), nextPlan.getDate(),
+                    nextPlan.getTime(), nextPlan.getLocation()).show(getSupportFragmentManager(), "plan_details");
         });
         findViewById(R.id.add_calendar_button).setOnClickListener(v -> {
             tracker.trackFeature(AnalyticsEvents.FEATURE_SCHEDULE, SCREEN);
-            if (loadedGroup == null || loadedGroup.getPlanTitle().isEmpty()
-                    || !ExternalActions.openCalendar(this, loadedGroup.getPlanTitle(), "", "", "")) {
+            if (nextPlan == null) {
+                toast("This group has no upcoming plan");
+            } else if (!ExternalActions.openCalendar(this, nextPlan.getTitle(), nextPlan.getDate(),
+                    nextPlan.getTime(), nextPlan.getLocation())) {
                 toast("No calendar application is available");
             }
         });
@@ -119,87 +125,121 @@ public class GroupDetailActivity extends AppCompatActivity implements GroupListe
         loadPlanContext();
     }
 
-    // f3: if we have the location permission we read the location, if not we ask the user for it
+    // f3: ask for the location permission once; the card works without it and says so
     private void loadPlanContext() {
-        if (hasLocationPermission()) {
-            readLocation();
-        } else {
+        if (!travelTime.hasLocationPermission()) {
             ActivityCompat.requestPermissions(this, new String[]{
                     Manifest.permission.ACCESS_FINE_LOCATION,
                     Manifest.permission.ACCESS_COARSE_LOCATION}, LOCATION_REQUEST);
         }
     }
 
-    private boolean hasLocationPermission() {
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
-                == PackageManager.PERMISSION_GRANTED;
-    }
-
-    // here we get the answer of the user after we ask for the permission
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != LOCATION_REQUEST) {
-            return;
-        }
-        if (hasLocationPermission()) {
-            readLocation();
-        } else {
-            campusText.setText("◎  Location permission denied");
-            travelText.setText("➜  Allow location to see your travel time");
+        if (requestCode == LOCATION_REQUEST) {
+            showTravel();
         }
     }
 
-    // asks the fused location provider for the current location
-    @SuppressLint("MissingPermission")
-    private void readLocation() {
-        LocationServices.getFusedLocationProviderClient(this)
-                .getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, new CancellationTokenSource().getToken())
-                .addOnSuccessListener(this, location -> {
-                    if (location == null) {
-                        campusText.setText("◎  Could not get your location");
-                        travelText.setText("➜  Travel time not available right now");
-                        return;
-                    }
-                    showCampusStatus(location);
-                    showTravelTime(location);
-                })
-                .addOnFailureListener(this, e -> {
-                    campusText.setText("◎  Could not get your location");
-                    travelText.setText("➜  Travel time not available right now");
-                });
-    }
-
-    // f1: shows if the user is inside or outside the campus
-    private void showCampusStatus(Location location) {
-        boolean onCampus = CampusArea.isOnCampus(location.getLatitude(), location.getLongitude());
-        campusText.setText(onCampus ? "◎  You are on campus" : "◎  You are off campus");
-    }
-
-    // f3 and f7: asks for the travel time and shows a warning if you cannot arrive before the plan starts
-    private void showTravelTime(Location location) {
-        distanceMatrix.getTravelMinutes(location.getLatitude(), location.getLongitude(), VENUE_LAT, VENUE_LNG,
-                new Callback<Integer>() {
+    /* This group's activities, from Firestore through ActivityRepository. */
+    private void loadGroupActivities() {
+        Repositories.activities().getActivities(UserSession.getCurrentUser().getId(),
+                new Callback<List<PlannedActivity>>() {
                     @Override
-                    public void onSuccess(Integer minutes) {
-                        if (isFinishing() || isDestroyed()) {
-                            return;
+                    public void onSuccess(List<PlannedActivity> activities) {
+                        groupActivities.clear();
+                        for (PlannedActivity activity : activities) {
+                            if (activity.getGroupId().equals(groupId)) {
+                                groupActivities.add(activity);
+                            }
                         }
-                        travelText.setText("➜  " + minutes + " min to the venue");
-                        boolean late = currentMinute() + minutes > PLAN_START_MINUTE;
-                        lateWarning.setVisibility(late ? View.VISIBLE : View.GONE);
+                        bindPlans();
                     }
 
                     @Override
                     public void onError(Exception error) {
-                        if (isFinishing() || isDestroyed()) {
-                            return;
-                        }
-                        // fallback: if maps does not answer, the card still works and only shows this message
-                        travelText.setText("➜  Travel time not available right now");
-                        lateWarning.setVisibility(View.GONE);
+                        bindPlans();
                     }
                 });
+    }
+
+    private void bindPlans() {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        Calendar now = Calendar.getInstance(PlanContext.bogota());
+        int nowMinute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+        nextPlan = PlanContext.nextPlan(groupActivities, now, nowMinute);
+        ((TextView) findViewById(R.id.next_plan_header)).setText(nextPlan == null ? "No upcoming group plan" : "Next Group Plan");
+        ((TextView) findViewById(R.id.plan_title_text)).setText(nextPlan == null
+                ? "Propose a plan to get the group together" : nextPlan.getTitle());
+        ((TextView) findViewById(R.id.next_plan_time)).setText(nextPlan == null ? ""
+                : (nextPlan.getDate() + " " + nextPlan.getTime()).trim());
+        ((TextView) findViewById(R.id.next_plan_location)).setText(nextPlan == null ? ""
+                : nextPlan.getLocation().isEmpty() ? "No place set yet" : nextPlan.getLocation());
+        showTravel();
+        bindRecentActivities(now);
+    }
+
+    // f1, f3 and f7: campus status, travel time and late warning for the group's next plan
+    private void showTravel() {
+        if (nextPlan == null) {
+            campusText.setText("");
+            travelText.setText("");
+            lateWarning.setVisibility(View.GONE);
+            return;
+        }
+        PlannedActivity plan = nextPlan;
+        travelText.setText("\u279C  Finding your travel time\u2026");
+        travelTime.travelTo(plan, new TravelTimeService.Listener() {
+            @Override
+            public void onTravel(TravelTimeService.Result result) {
+                if (isFinishing() || isDestroyed() || plan != nextPlan) {
+                    return;
+                }
+                campusText.setText(result.userOnCampus ? "\u25CE  You are on campus" : "\u25CE  You are off campus");
+                travelText.setText(TravelTimeService.describe(result));
+                lateWarning.setVisibility(result.late ? View.VISIBLE : View.GONE);
+            }
+
+            @Override
+            public void onProblem(TravelTimeService.Problem problem) {
+                if (isFinishing() || isDestroyed() || plan != nextPlan) {
+                    return;
+                }
+                campusText.setText(problem == TravelTimeService.Problem.NO_PERMISSION
+                        ? "\u25CE  Location permission denied" : "");
+                travelText.setText(TravelTimeService.describe(problem));
+                lateWarning.setVisibility(View.GONE);
+            }
+        });
+    }
+
+    /* Past activities of the group, newest first, from Firestore. */
+    private void bindRecentActivities(Calendar now) {
+        LinearLayout list = findViewById(R.id.recent_activities_list);
+        list.removeAllViews();
+        List<PlannedActivity> past = new ArrayList<>();
+        for (PlannedActivity activity : groupActivities) {
+            Integer offset = PlanContext.dayOffset(activity.getDate(), now);
+            if (offset != null && offset < 0) {
+                past.add(activity);
+            }
+        }
+        past.sort((a, b) -> Long.compare(b.getCreatedAt(), a.getCreatedAt()));
+        for (int i = 0; i < past.size() && i < 3; i++) {
+            PlannedActivity activity = past.get(i);
+            TextView row = new TextView(this);
+            row.setText(activity.getTitle() + "\n" + activity.getDate()
+                    + (activity.getLocation().isEmpty() ? "" : " \u2022 " + activity.getLocation())
+                    + " \u2022 " + (PlannedActivity.STATUS_CONFIRMED.equals(activity.getStatus()) ? "Confirmed" : "Proposed"));
+            row.setTextSize(11);
+            row.setTextColor(getColor(R.color.brand_dark));
+            row.setPadding(0, 16, 0, 0);
+            list.addView(row);
+        }
+        findViewById(R.id.recent_activities_empty).setVisibility(past.isEmpty() ? View.VISIBLE : View.GONE);
     }
 
     @Override
@@ -207,6 +247,7 @@ public class GroupDetailActivity extends AppCompatActivity implements GroupListe
         super.onStart();
         if (groupId != null) {
             Repositories.groups().observeGroup(groupId, this);
+            loadGroupActivities();
         } else {
             Repositories.groups().getGroups(UserSession.getCurrentUser().getId(), new Callback<List<Group>>() {
                 @Override
@@ -214,6 +255,7 @@ public class GroupDetailActivity extends AppCompatActivity implements GroupListe
                     if (!groups.isEmpty()) {
                         groupId = groups.get(0).getId();
                         Repositories.groups().observeGroup(groupId, GroupDetailActivity.this);
+                        loadGroupActivities();
                     } else {
                         toast("No groups are available");
                     }
@@ -242,14 +284,10 @@ public class GroupDetailActivity extends AppCompatActivity implements GroupListe
         ((TextView) findViewById(R.id.group_description_text)).setText(group.getSize() + " members");
         ((TextView) findViewById(R.id.top_group_name_text)).setText(group.getName());
         ((TextView) findViewById(R.id.top_group_subtitle_text)).setText(group.getSize() + " members");
-        ((TextView) findViewById(R.id.next_plan_header)).setText(
-                group.getPlanTitle().isEmpty() ? "No active group plan" : "Next Group Plan");
         ((TextView) findViewById(R.id.next_plan_status)).setText(
-                group.getPlanTitle().isEmpty() ? "No data" : group.getGoingCount() + "/" + group.getRsvpTotal() + " responses");
-        ((TextView) findViewById(R.id.next_plan_time)).setText("Schedule not specified");
-        ((TextView) findViewById(R.id.next_plan_location)).setText("Location not specified");
+                group.getGoingCount() + "/" + group.getRsvpTotal() + " responses");
         renderRoster(group);
-        ((TextView) findViewById(R.id.plan_title_text)).setText(group.getPlanTitle());
+        loadSyncedCount(group);
 
         int going = group.getGoingCount();
         int total = Math.max(1, group.getRsvpTotal());
@@ -297,8 +335,9 @@ public class GroupDetailActivity extends AppCompatActivity implements GroupListe
             View row = getLayoutInflater().inflate(R.layout.item_roster_member, list, false);
             ((TextView) row.findViewById(R.id.member_initials)).setText(member.getInitials());
             ((TextView) row.findViewById(R.id.member_name)).setText(member.getName());
-            // the first member is the one who made the group
-            row.findViewById(R.id.member_leader_badge).setVisibility(i == 0 ? View.VISIBLE : View.GONE);
+            // the leader is the group's owner in Firestore; seeded groups have none
+            row.findViewById(R.id.member_leader_badge).setVisibility(
+                    member.getId().equals(group.getOwnerId()) ? View.VISIBLE : View.GONE);
             row.findViewById(R.id.member_going_badge).setVisibility(going ? View.VISIBLE : View.GONE);
             ((TextView) row.findViewById(R.id.member_rsvp_text)).setText(going ? "Going" : "No answer yet");
             TextView status = row.findViewById(R.id.member_status_text);
@@ -312,16 +351,68 @@ public class GroupDetailActivity extends AppCompatActivity implements GroupListe
                 "%d/%d Ready • %d free now", group.getGoingCount(), group.getSize(), freeNow));
     }
 
+    /* "N/M Synced": members whose calendar for today is known to the backend (getScheduleDay). */
+    private void loadSyncedCount(Group group) {
+        TextView synced = findViewById(R.id.group_synced_badge);
+        String me = UserSession.getCurrentUser().getId();
+        List<String> others = new ArrayList<>();
+        for (Member member : group.getMembers()) {
+            if (!member.getId().equals(me)) {
+                others.add(member.getId());
+            }
+        }
+        java.text.SimpleDateFormat key = new java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        key.setTimeZone(PlanContext.bogota());
+        String today = key.format(new java.util.Date());
+        // The backend compares at most 10 friends per call, so the group is checked in batches.
+        List<List<String>> batches = new ArrayList<>();
+        for (int start = 0; start < others.size(); start += ScheduleRepository.MAX_FRIENDS) {
+            batches.add(others.subList(start, Math.min(others.size(), start + ScheduleRepository.MAX_FRIENDS)));
+        }
+        if (batches.isEmpty()) {
+            batches.add(new ArrayList<>());
+        }
+        int[] known = {0};
+        int[] pending = {batches.size()};
+        boolean[] failed = {false};
+        for (int b = 0; b < batches.size(); b++) {
+            boolean countMe = b == 0;
+            Repositories.schedules().getDay(today, batches.get(b), new Callback<List<DaySchedule>>() {
+                @Override
+                public void onSuccess(List<DaySchedule> schedules) {
+                    for (DaySchedule schedule : schedules) {
+                        // every call also returns my own schedule; count it once
+                        if (schedule.isKnown() && (countMe || !schedule.getOwnerId().equals(me))) {
+                            known[0]++;
+                        }
+                    }
+                    done();
+                }
+
+                @Override
+                public void onError(Exception error) {
+                    failed[0] = true;
+                    done();
+                }
+
+                private void done() {
+                    if (--pending[0] == 0 && !isFinishing()) {
+                        synced.setText(failed[0] ? "\u25CF Sync unknown"
+                                : String.format(Locale.US, "\u25CF %d/%d Synced", known[0], group.getSize()));
+                    }
+                }
+            });
+        }
+    }
+
     private int currentMinute() {
-        Calendar now = Calendar.getInstance();
+        Calendar now = Calendar.getInstance(PlanContext.bogota());
         return now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
     }
 
     private void renderCommonFree(List<TimeSlot> slots, int groupSize) {
         TextView commonFree = findViewById(R.id.common_free_text);
         TextView badge = findViewById(R.id.common_free_badge);
-        TextView synced = findViewById(R.id.group_synced_badge);
-        synced.setText(String.format(Locale.US, "● %d/%d Synced", groupSize, groupSize));
         if (slots.isEmpty()) {
             commonFree.setText("No common free time today");
             badge.setVisibility(View.GONE);

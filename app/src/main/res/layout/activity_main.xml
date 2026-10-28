@@ -97,6 +97,7 @@
                             android:paddingTop="3dp"
                             android:paddingEnd="6dp"
                             android:paddingBottom="3dp"
+                            android:id="@+id/restored_user_verified"
                             android:text="@string/verified"
                             android:textColor="@color/brand_success"
                             android:textSize="10sp"
@@ -107,6 +108,7 @@
                         android:layout_height="wrap_content"
                         android:ellipsize="end"
                         android:singleLine="true"
+                        android:id="@+id/restored_user_program"
                         android:text="Systems and Computer Engineering"
                         android:textColor="@color/brand_slate"
                         android:textSize="12sp" />

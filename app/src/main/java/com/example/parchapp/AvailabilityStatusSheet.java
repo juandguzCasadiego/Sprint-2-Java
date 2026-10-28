@@ -41,8 +41,13 @@ public class AvailabilityStatusSheet extends BottomSheetDialogFragment {
         setupStatusRow(view, R.id.status_busy, R.id.check_busy, "Busy / Personal");
         setupStatusRow(view, R.id.status_transit, R.id.check_transit, "Commute / In Transit");
 
+        // the sheet opens on the status the user really has (from the backend profile), not always on commute
+        String current = Repositories.status().getAvailability();
+        View currentRow = view.findViewById(rowFor(current.isEmpty() ? "Available now" : current));
+        // the xml starts with the commute row highlighted, clicking the real one moves the highlight
         selectedStatusRow = view.findViewById(R.id.status_transit);
         selectedStatusCheck = view.findViewById(R.id.check_transit);
+        currentRow.performClick();
 
         TextView[] durationChips = {
                 view.findViewById(R.id.duration_1h),
@@ -68,6 +73,21 @@ public class AvailabilityStatusSheet extends BottomSheetDialogFragment {
             Toast.makeText(requireContext(), selectedStatusName + " · " + selectedDurationName, Toast.LENGTH_SHORT).show();
             dismiss();
         });
+    }
+
+    private static int rowFor(String label) {
+        switch (com.example.parchapp.domain.StatusService.codeFor(label)) {
+            case com.example.parchapp.data.ProfileRepository.IN_CLASS:
+                return R.id.status_class;
+            case com.example.parchapp.data.ProfileRepository.FOCUSED:
+                return R.id.status_focus;
+            case com.example.parchapp.data.ProfileRepository.BUSY:
+                return R.id.status_busy;
+            case com.example.parchapp.data.ProfileRepository.IN_TRANSIT:
+                return R.id.status_transit;
+            default:
+                return R.id.status_available;
+        }
     }
 
     private void setupStatusRow(View root, int rowId, int checkId, String statusName) {

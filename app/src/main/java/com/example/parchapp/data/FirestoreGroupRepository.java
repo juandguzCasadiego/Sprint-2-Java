@@ -21,16 +21,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
-/* Groups stored in the {@code groups} collection. Reads try the local cache first and then the server; live updates come from one snapshot listener per observed group.
- */
+/* Groups stored in the {@code groups} collection. Reads try the local cache first and then the server; live updates come from one snapshot listener per observed group. */
 class FirestoreGroupRepository extends BaseGroupRepository {
+    private final com.google.firebase.functions.FirebaseFunctions functions;
     private static final String TAG = "FirestoreGroupRepo";
     private static final String COLLECTION = "groups";
 
     private final CollectionReference collection;
     private final Map<String, ListenerRegistration> registrations = new HashMap<>();
 
-    FirestoreGroupRepository(FirebaseFirestore db) {
+    FirestoreGroupRepository(FirebaseFirestore db, com.google.firebase.functions.FirebaseFunctions functions) {
+        this.functions = functions;
         collection = db.collection(COLLECTION);
     }
 
@@ -67,15 +68,28 @@ class FirestoreGroupRepository extends BaseGroupRepository {
                 .addOnFailureListener(error -> MainThread.post(() -> callback.onError(error)));
     }
 
+    /* Groups are created by the backend (callable createGroup): the security rules do not let clients write new group documents, so the owner, membership and ids are set server side. */
     @Override
-    public void createGroup(Group group, Callback<Group> callback) {
-        // firestore gives a random id to the new document
-        DocumentReference ref = collection.document();
-        ref.set(toMap(group)).addOnFailureListener(e -> Log.w(TAG, "Creating group failed", e));
-        // the write is saved on the phone first, so we answer right away (it also works offline)
-        Group saved = new Group(ref.getId(), group.getName(), group.getIcon(), group.getPlanTitle(),
-                group.getMembers(), group.getGoingIds(), group.getMaybeIds(), group.getPendingInvites());
-        MainThread.post(() -> callback.onSuccess(saved));
+    public void createGroup(Group group, String category, Callback<Group> callback) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("requestId", java.util.UUID.randomUUID().toString().replace("-", ""));
+        request.put("name", group.getName());
+        request.put("category", category);
+        request.put("inviteeIds", new ArrayList<String>());
+        functions.getHttpsCallable("createGroup").call(request)
+                .addOnSuccessListener(result -> {
+                    Object raw = result.getData() instanceof Map ? ((Map<?, ?>) result.getData()).get("groupId") : null;
+                    if (raw == null) {
+                        callback.onError(new IllegalStateException("The backend did not return a group id"));
+                        return;
+                    }
+                    String groupId = raw.toString();
+                    for (String email : group.getPendingInvites()) {
+                        addInvite(groupId, email);
+                    }
+                    getGroup(groupId, callback);
+                })
+                .addOnFailureListener(callback::onError);
     }
 
     @Override
@@ -179,7 +193,8 @@ class FirestoreGroupRepository extends BaseGroupRepository {
         }
         return new Group(snapshot.getId(), asString(snapshot.get("name")), asString(snapshot.get("icon")),
                 asString(snapshot.get("planTitle")), members, stringList(snapshot.get("goingIds")),
-                stringList(snapshot.get("maybeIds")), stringList(snapshot.get("pendingInvites")));
+                stringList(snapshot.get("maybeIds")), stringList(snapshot.get("pendingInvites")),
+                asString(snapshot.get("ownerId")));
     }
 
     private static int asInt(Object value) {

@@ -44,14 +44,13 @@ class FirestoreActivityRepository implements ActivityRepository {
         map.put("status", activity.getStatus());
         map.put("createdBy", FirebaseAuth.getInstance().getUid());
         map.put("createdAt", FieldValue.serverTimestamp());
-        if (activity.getGroupSizeAtCreation() > 0 || activity.isComparisonUsed()) {
-            Map<String, Object> planningContext = new HashMap<>();
-            planningContext.put("groupSizeAtCreation", activity.getGroupSizeAtCreation());
-            planningContext.put("comparisonUsed", activity.isComparisonUsed());
-            planningContext.put("locationAreaId", "unknown");
-            planningContext.put("timeBucket", "unknown");
-            map.put("planningContext", planningContext);
-        }
+        // the campus place picked in New Activity travels as locationAreaId, so travel time and BQ11 know where it is
+        Map<String, Object> planningContext = new HashMap<>();
+        planningContext.put("groupSizeAtCreation", activity.getGroupSizeAtCreation());
+        planningContext.put("comparisonUsed", activity.isComparisonUsed());
+        planningContext.put("locationAreaId", activity.getLocationAreaId());
+        planningContext.put("timeBucket", "unknown");
+        map.put("planningContext", planningContext);
 
         // Firestore acknowledges an offline write locally and queues it for the server. Surface validation or permission failures instead of reporting success unconditionally.
         ref.set(map)
@@ -95,16 +94,21 @@ class FirestoreActivityRepository implements ActivityRepository {
     }
 
     private static PlannedActivity fromSnapshot(DocumentSnapshot snapshot) {
-        Map<String, Object> context = snapshot.get("planningContext", Map.class);
+        // read it as a plain object: asking firestore for Map.class crashes because Map has generic types
+        Object rawContext = snapshot.get("planningContext");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> context = rawContext instanceof Map ? (Map<String, Object>) rawContext : null;
         int groupSize = context != null && context.get("groupSizeAtCreation") instanceof Number
                 ? ((Number) context.get("groupSizeAtCreation")).intValue() : 0;
         boolean comparisonUsed = context != null && Boolean.TRUE.equals(context.get("comparisonUsed"));
+        String areaId = context != null && context.get("locationAreaId") != null
+                ? context.get("locationAreaId").toString() : PlannedActivity.UNKNOWN_AREA;
         return new PlannedActivity(snapshot.getId(),
                 stringValue(snapshot.get("groupId")), stringValue(snapshot.get("title")),
                 stringValue(snapshot.get("category")), stringValue(snapshot.get("date")),
                 stringValue(snapshot.get("time")), stringValue(snapshot.get("location")),
                 stringValue(snapshot.get("status")), timestampMillis(snapshot.get("createdAt")),
-                groupSize, comparisonUsed);
+                groupSize, comparisonUsed, areaId, stringValue(snapshot.get("createdBy")));
     }
 
     private static String stringValue(Object value) {
@@ -129,5 +133,28 @@ class FirestoreActivityRepository implements ActivityRepository {
     @Override
     public void cacheTravelMinutes(String activityId, int minutes) {
         travelCache.put(activityId, minutes);
+    }
+
+    @Override
+    public void getActivity(String activityId, Callback<PlannedActivity> callback) {
+        db.collection("activities").document(activityId).get()
+                .addOnSuccessListener(snapshot -> {
+                    if (snapshot.exists()) {
+                        callback.onSuccess(fromSnapshot(snapshot));
+                    } else {
+                        callback.onError(new IllegalStateException("Activity " + activityId + " not found"));
+                    }
+                })
+                .addOnFailureListener(callback::onError);
+    }
+
+    // after updating we read the activity again so the screen shows what firestore really has
+    @Override
+    public void confirmActivity(String activityId, Callback<PlannedActivity> callback) {
+        // the rules let only the organiser change status, and only to PROPOSED or CONFIRMED
+        db.collection("activities").document(activityId)
+                .update("status", PlannedActivity.STATUS_CONFIRMED)
+                .addOnSuccessListener(unused -> getActivity(activityId, callback))
+                .addOnFailureListener(callback::onError);
     }
 }

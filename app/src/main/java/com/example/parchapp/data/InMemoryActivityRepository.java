@@ -34,4 +34,28 @@ class InMemoryActivityRepository implements ActivityRepository {
     public void cacheTravelMinutes(String activityId, int minutes) {
         travelCache.put(activityId, minutes);
     }
+
+    @Override
+    public void getActivity(String activityId, Callback<PlannedActivity> callback) {
+        for (PlannedActivity activity : activities) {
+            if (activity.getId().equals(activityId)) {
+                MainThread.post(() -> callback.onSuccess(activity));
+                return;
+            }
+        }
+        MainThread.post(() -> callback.onError(new IllegalStateException("Activity not found")));
+    }
+
+    @Override
+    public void confirmActivity(String activityId, Callback<PlannedActivity> callback) {
+        for (int i = 0; i < activities.size(); i++) {
+            if (activities.get(i).getId().equals(activityId)) {
+                PlannedActivity confirmed = activities.get(i).withStatus(PlannedActivity.STATUS_CONFIRMED);
+                activities.set(i, confirmed);
+                MainThread.post(() -> callback.onSuccess(confirmed));
+                return;
+            }
+        }
+        MainThread.post(() -> callback.onError(new IllegalStateException("Activity not found")));
+    }
 }
